@@ -3,6 +3,8 @@
 #include <queue>
 #include <algorithm>
 #include <iostream> 
+#include <fstream>
+#include <cstdint>
 
 using namespace std;
 
@@ -64,24 +66,23 @@ void merge(uint64_t& id,int& taille ,vector<TokenNode>& articles,unordered_map<u
 
 		}
 
-		if (next != -1)
+		
+		if (articles[next].next_idx != -1)
 		{
-			if (articles[next].next_idx != -1)
-			{
-				uint64_t a = pack_pair(articles[next].token_id,articles[articles[next].next_idx].token_id);
-				freq[a]--;
-				modification.push_back(a);
-				uint64_t b = pack_pair(taille,articles[articles[next].next_idx].token_id);
-				freq[b]++;
-				modification.push_back(b);
-				position[b].push_back(x);
+			uint64_t a = pack_pair(articles[next].token_id,articles[articles[next].next_idx].token_id);
+			freq[a]--;
+			modification.push_back(a);
+			uint64_t b = pack_pair(taille,articles[articles[next].next_idx].token_id);
+			freq[b]++;
+			modification.push_back(b);
+			position[b].push_back(x);
 
-				articles[articles[next].next_idx].prev_idx = x;
+			articles[articles[next].next_idx].prev_idx = x;
 				
-			}
-			articles[x].next_idx = articles[next].next_idx;
-			articles[next].token_id = -1;
 		}
+		articles[x].next_idx = articles[next].next_idx;
+		articles[next].token_id = -1;
+		
 
 		articles[x].token_id = taille;
 
@@ -112,7 +113,12 @@ int main()
 	int previous = -1;
 	int current ;
 	int longueur = 0;
-	while (cin >> current)
+
+	ifstream preprocessed_data("fineweb.txt");
+
+	if (preprocessed_data)
+	{
+		while (preprocessed_data >> current)
 	{
 		if (current == -1)
 		{
@@ -121,16 +127,16 @@ int main()
 		}
 		else
 		{
-			articles[longueur].next_idx = longueur + 1;
 			TokenNode node;
+			node.next_idx = longueur;
 			node.token_id = current;
 			if (previous != -1)
 			{
-				node.prev_idx = longueur;
+				node.prev_idx = longueur - 1;
 
 				uint64_t id = pack_pair(previous,current);
 				freq[id]++;
-				position[id].push_back(longueur);
+				position[id].push_back(longueur - 1);
 			}
 
 			else node.prev_idx = -1;
@@ -142,8 +148,13 @@ int main()
 		previous = current;
 	}
 
-	
+	preprocessed_data.close();
 
+	}
+
+	else cerr << "Erreur à l'ouverture de l'entrée !" << endl;
+
+	
 	vector<HeapNode> constructeur; 
 	constructeur.reserve(freq.size());
 
@@ -154,12 +165,13 @@ int main()
 
 	priority_queue<HeapNode> tas_max(constructeur.begin(), constructeur.end());
 
-	unordered_map<uint64_t,int,SplitMix64Hash> vocab;
 	uint64_t inverse_vocab[32000];
 
 	int taille = 256;
-	while (taille <=32000)
+	while (taille < 32000)
 	{
+		if (tas_max.empty()) break;
+
 		HeapNode node;
 		uint64_t id;
 		do {
@@ -167,12 +179,30 @@ int main()
 		tas_max.pop();
 		id = node.id;
 		} while (node.freq!=freq[id]);
+
+		if (node.freq < 2) break;
 		
 		merge(id,taille,articles,position,freq, tas_max);
-		vocab[id]=taille;
+		inverse_vocab[taille] = id;
 		taille++;
 	}
 
+	ofstream fichier("inverse_vocab.txt");
 
-	//sauvegarder dans un bon format mes données de vocab et de inverse_vocab
+	if(fichier)  
+        {
+			for (int i = 256 ; i<taille ; i++)
+			{
+				uint64_t id = inverse_vocab[i];
+				int byte1 = id >> 32;
+				int byte2 = id & 0xFFFFFFFF ;
+				fichier << i << " " << byte1 << " " << byte2 << "\n";
+			}
+            
+                fichier.close();  
+        }
+        else 
+                cerr << "Erreur à l'ouverture de la sortie !" << endl;
+ 
+    return 0;
 }
