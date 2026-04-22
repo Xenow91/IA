@@ -114,12 +114,18 @@ int main()
 	int current ;
 	int longueur = 0;
 
+	const int MAX_TOKENS = 500000000;
+
 	ifstream preprocessed_data("fineweb.txt");
 
 	if (preprocessed_data)
 	{
 		while (preprocessed_data >> current)
 	{
+		if (longueur >= MAX_TOKENS) {
+                break; 
+            }
+
 		if (current == -1)
 		{
 			if (previous == -1) continue;
