@@ -8,8 +8,7 @@
 
 using namespace std;
 
-
-inline uint64_t pack_pair(int a, int b) {
+inline uint64_t pack_pair(uint16_t a, int16_t b) {
     return (static_cast<uint64_t>(a) << 32) | static_cast<uint64_t>(b);
 }
 
@@ -25,9 +24,10 @@ struct SplitMix64Hash
 };
 
 struct TokenNode {
-    int token_id;
+    uint16_t token_id;
     int prev_idx;
-    int next_idx; 
+    int next_idx;
+	int next_occ_idx;
 };
 
 struct HeapNode {
@@ -39,7 +39,7 @@ struct HeapNode {
 	}
 };
 
-void merge(uint64_t& id,int& taille ,vector<TokenNode>& articles,unordered_map<uint64_t,vector<int>,SplitMix64Hash>& position,unordered_map<uint64_t,int,SplitMix64Hash>& freq, priority_queue<HeapNode>& tas_max )
+void merge(uint64_t& id,uint16_t& taille ,vector<TokenNode>& articles,unordered_map<uint64_t,vector<int>,SplitMix64Hash>& position,unordered_map<uint64_t,int,SplitMix64Hash>& freq, priority_queue<HeapNode>& tas_max )
 {
 	vector<uint64_t> modification;
 
@@ -65,8 +65,7 @@ void merge(uint64_t& id,int& taille ,vector<TokenNode>& articles,unordered_map<u
 			position[b].push_back(prev);
 
 		}
-
-		
+	
 		if (articles[next].next_idx != -1)
 		{
 			uint64_t a = pack_pair(articles[next].token_id,articles[articles[next].next_idx].token_id);
@@ -112,9 +111,11 @@ int main()
 
 	int previous = -1;
 	int current ;
-	int longueur = 0;
+	uint32_t longueur = 0;
 
-	const int MAX_TOKENS = 500000000;
+	const int MAX_TOKENS = 100000000;
+
+	articles.reserve(MAX_TOKENS);
 
 	ifstream preprocessed_data("fineweb.txt");
 
@@ -122,6 +123,7 @@ int main()
 	{
 		while (preprocessed_data >> current)
 	{
+
 		if (longueur >= MAX_TOKENS) {
                 break; 
             }
@@ -160,7 +162,6 @@ int main()
 
 	else cerr << "Erreur à l'ouverture de l'entrée !" << endl;
 
-	
 	vector<HeapNode> constructeur; 
 	constructeur.reserve(freq.size());
 
@@ -173,7 +174,7 @@ int main()
 
 	uint64_t inverse_vocab[32000];
 
-	int taille = 256;
+	uint16_t taille = 256;
 	while (taille < 32000)
 	{
 		if (tas_max.empty()) break;
@@ -187,7 +188,7 @@ int main()
 		} while (node.freq!=freq[id]);
 
 		if (node.freq < 2) break;
-		
+	
 		merge(id,taille,articles,position,freq, tas_max);
 		inverse_vocab[taille] = id;
 		taille++;
