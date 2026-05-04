@@ -18,7 +18,7 @@ with open('C:/Users/linkm/Documents/GitHub/IA/src/fineweb.txt', 'w') as f:
             for byte in word.encode(): 
                 buffer_article.append(str(byte))
                 
-        buffer_article.append("-1")
+            buffer_article.append("-1")
 
         f.write(" ".join(buffer_article) + " ")
 

@@ -8,7 +8,7 @@
 
 using namespace std;
 
-inline uint64_t pack_pair(uint16_t a, int16_t b) {
+inline uint64_t pack_pair(int a, int b) {
     return (static_cast<uint64_t>(a) << 32) | static_cast<uint64_t>(b);
 }
 
@@ -24,10 +24,9 @@ struct SplitMix64Hash
 };
 
 struct TokenNode {
-    uint16_t token_id;
+	int token_id;
     int prev_idx;
-    int next_idx;
-	int next_occ_idx;
+    int next_idx;	int next_occ_idx = -1;
 };
 
 struct HeapNode {
@@ -38,66 +37,70 @@ struct HeapNode {
 		return freq < autre.freq;
 	}
 };
-
-void merge(uint64_t& id,uint16_t& taille ,vector<TokenNode>& articles,unordered_map<uint64_t,vector<int>,SplitMix64Hash>& position,unordered_map<uint64_t,int,SplitMix64Hash>& freq, priority_queue<HeapNode>& tas_max )
+void merge(uint64_t target_id, int new_token_id, 
+           vector<TokenNode>& articles, 
+           unordered_map<uint64_t, vector<int>, SplitMix64Hash>& positions, 
+           unordered_map<uint64_t, int, SplitMix64Hash>& freq, 
+           priority_queue<HeapNode>& tas_max) 
 {
-	vector<uint64_t> modification;
+    vector<uint64_t> modifications;
+    
+    int left_target = target_id >> 32;
+    int right_target = target_id & 0xFFFFFFFF;
 
-	for (int x : position[id])
-	{
-		if (articles[x].token_id==-1) continue;
+    for (int idx : positions[target_id]) {
+        
+        if (articles[idx].token_id != left_target) continue;
+        
+        int next_idx = articles[idx].next_idx;
+        if (next_idx == -1 || articles[next_idx].token_id != right_target) continue;
 
-		int next = articles[x].next_idx;
-		if (next == -1) continue; 
-		if (pack_pair(articles[x].token_id, articles[next].token_id) != id) continue;
-		
+        int prev_idx = articles[idx].prev_idx;
+        int next_next_idx = articles[next_idx].next_idx;
 
-		int prev = articles[x].prev_idx;
-		if (prev != -1)
-		{
-			uint64_t a = pack_pair(articles[prev].token_id,articles[x].token_id);
-			freq[a]--;
-			modification.push_back(a);
+        if (prev_idx != -1) {
+            uint64_t old_prev_pair = pack_pair(articles[prev_idx].token_id, left_target);
+            freq[old_prev_pair]--;
+        }
+        if (next_next_idx != -1) {
+            uint64_t old_next_pair = pack_pair(right_target, articles[next_next_idx].token_id);
+            freq[old_next_pair]--;
+        }
 
-			uint64_t b = pack_pair(articles[prev].token_id,taille);
-			freq[b]++;
-			modification.push_back(b);
-			position[b].push_back(prev);
+        articles[idx].token_id = new_token_id;
+        articles[idx].next_idx = next_next_idx;
+        
+        if (next_next_idx != -1) {
+            articles[next_next_idx].prev_idx = idx;
+        }
 
-		}
-	
-		if (articles[next].next_idx != -1)
-		{
-			uint64_t a = pack_pair(articles[next].token_id,articles[articles[next].next_idx].token_id);
-			freq[a]--;
-			modification.push_back(a);
-			uint64_t b = pack_pair(taille,articles[articles[next].next_idx].token_id);
-			freq[b]++;
-			modification.push_back(b);
-			position[b].push_back(x);
+        articles[next_idx].token_id = -1;
+        articles[next_idx].prev_idx = -1;
+        articles[next_idx].next_idx = -1;
 
-			articles[articles[next].next_idx].prev_idx = x;
-				
-		}
-		articles[x].next_idx = articles[next].next_idx;
-		articles[next].token_id = -1;
-		
+        if (prev_idx != -1) {
+            uint64_t new_prev_pair = pack_pair(articles[prev_idx].token_id, new_token_id);
+            freq[new_prev_pair]++;
+            positions[new_prev_pair].push_back(prev_idx);
+            modifications.push_back(new_prev_pair);
+        }
+        if (next_next_idx != -1) {
+            uint64_t new_next_pair = pack_pair(new_token_id, articles[next_next_idx].token_id);
+            freq[new_next_pair]++;
+            positions[new_next_pair].push_back(idx);
+            modifications.push_back(new_next_pair);
+        }
+    }
 
-		articles[x].token_id = taille;
+    sort(modifications.begin(), modifications.end());
+    modifications.erase(unique(modifications.begin(), modifications.end()), modifications.end());
 
-	}
+    for (uint64_t x : modifications) {
+        tas_max.push({freq[x], x});
+    }
 
-	sort(modification.begin(),modification.end());
-	modification.erase( unique(modification.begin(), modification.end()), modification.end() );
-
-	for (uint64_t x : modification)
-	{
-		HeapNode node;
-		node.freq = freq[x];
-		node.id = x;
-		tas_max.push(node);
-	}
-};
+    positions.erase(target_id); 
+}
 
 
 int main()
@@ -109,11 +112,14 @@ int main()
 	unordered_map<uint64_t,int,SplitMix64Hash> freq;
 	unordered_map<uint64_t,vector<int>,SplitMix64Hash> position;
 
+	freq.reserve(5000000); 
+	position.reserve(5000000);
+
 	int previous = -1;
 	int current ;
 	uint32_t longueur = 0;
 
-	const int MAX_TOKENS = 100000000;
+	const int MAX_TOKENS = 200000000;
 
 	articles.reserve(MAX_TOKENS);
 
@@ -136,15 +142,18 @@ int main()
 		else
 		{
 			TokenNode node;
-			node.next_idx = longueur;
+			node.next_idx = -1 ;
 			node.token_id = current;
+
 			if (previous != -1)
 			{
 				node.prev_idx = longueur - 1;
+				articles[longueur - 1].next_idx = longueur;
 
-				uint64_t id = pack_pair(previous,current);
+				uint64_t id = pack_pair(previous, current);
 				freq[id]++;
 				position[id].push_back(longueur - 1);
+				
 			}
 
 			else node.prev_idx = -1;
@@ -177,39 +186,72 @@ int main()
 	uint16_t taille = 256;
 	while (taille < 32000)
 	{
-		if (tas_max.empty()) break;
-
 		HeapNode node;
 		uint64_t id;
-		do {
-		node = tas_max.top();
-		tas_max.pop();
-		id = node.id;
-		} while (node.freq!=freq[id]);
+		bool valid_found = false;
 
-		if (node.freq < 2) break;
+		while (!tas_max.empty()) {
+			node = tas_max.top();
+			tas_max.pop();
+			id = node.id;
+			
+			if (node.freq == freq[id]) {
+				valid_found = true;
+				break;
+			}	
+		}
+
+		if (!valid_found || node.freq < 2) break; 
 	
 		merge(id,taille,articles,position,freq, tas_max);
 		inverse_vocab[taille] = id;
 		taille++;
 	}
 
-	ofstream fichier("inverse_vocab.txt");
 
-	if(fichier)  
-        {
-			for (int i = 256 ; i<taille ; i++)
-			{
-				uint64_t id = inverse_vocab[i];
-				int byte1 = id >> 32;
-				int byte2 = id & 0xFFFFFFFF ;
-				fichier << i << " " << byte1 << " " << byte2 << "\n";
-			}
-            
-                fichier.close();  
+	// Fichier utilisé pour l'encodeur et le décodeur en python
+	
+    ofstream out_merges("merges.txt");
+    if (out_merges) {
+        for (int i = 256; i < taille; i++) {
+            uint64_t paire = inverse_vocab[i];
+            int left_id = paire >> 32;
+            int right_id = paire & 0xFFFFFFFF;
+            out_merges << left_id << " " << right_id << " " << i << "\n";
         }
-        else 
-                cerr << "Erreur à l'ouverture de la sortie !" << endl;
+        out_merges.close();
+    }
+
+    unordered_map<int, vector<uint8_t>> vocab_bytes;
+    
+    for (int i = 0; i < 256; i++) {
+        vocab_bytes[i] = { static_cast<uint8_t>(i) };
+    }
+
+    ofstream out_vocab("vocab.txt");
+    if (out_vocab) {
+        for (int i = 256; i < taille; i++) {
+            uint64_t paire = inverse_vocab[i];
+            int left_id = paire >> 32;
+            int right_id = paire & 0xFFFFFFFF;
+            
+            vector<uint8_t> seq = vocab_bytes[left_id];
+            vector<uint8_t> right_seq = vocab_bytes[right_id];
+            seq.insert(seq.end(), right_seq.begin(), right_seq.end());
+            
+            vocab_bytes[i] = seq;
+        }
+
+        for (int i = 0; i < taille; i++) {
+            out_vocab << i << ":";
+            for (size_t j = 0; j < vocab_bytes[i].size(); j++) {
+                out_vocab << static_cast<int>(vocab_bytes[i][j]);
+                if (j < vocab_bytes[i].size() - 1) out_vocab << ",";
+            }
+            out_vocab << "\n";
+        }
+        out_vocab.close();
+    }
  
     return 0;
 }
