@@ -15,7 +15,7 @@ with open('C:/Users/linkm/Documents/GitHub/IA/src/fineweb.txt', 'w') as f:
         buffer_article = []
         
         for word in article_list:
-            for byte in word.encode(): 
+            for byte in word.encode():
                 buffer_article.append(str(byte))
                 
             buffer_article.append("-1")
