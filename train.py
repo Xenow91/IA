@@ -103,8 +103,8 @@ if os.path.exists(checkpoint_path):
     print("-> État de l'optimiseur AdamW restauré avec succès.")
 
 
-print("Compilation du modèle")
-model = torch.compile(model)
+# print("Compilation du modèle")
+# model = torch.compile(model)
 
 
 for iter in range(start_iter, max_iters):
