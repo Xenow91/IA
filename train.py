@@ -79,7 +79,7 @@ def estimate_loss(model, eval_iters=20):
 start_iter = 0
 best_val_loss = float('inf')
 
-checkpoint_path = 'ckpt.pt'
+checkpoint_path = '/content/drive/MyDrive/IA_Data/ckpt.pt'
 
 if os.path.exists(checkpoint_path):
     print(f"Fichier de sauvegarde détecté. Reprise de l'entraînement depuis {checkpoint_path}...")
@@ -127,7 +127,7 @@ for iter in range(start_iter, max_iters):
             }
             
             print(f"--> Amélioration détectée. Sauvegarde du checkpoint (Loss: {best_val_loss:.4f})", flush=True)
-            torch.save(checkpoint, 'ckpt.pt')
+            torch.save(checkpoint, checkpoint_path)
 
     x, y = train_loader.get_batch()
     
