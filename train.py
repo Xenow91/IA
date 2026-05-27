@@ -55,7 +55,7 @@ val_loader = DataLoaderLite(data_dir=data_dir, split="val",
                               batch_size=batch_size, block_size=block_size, 
                               device=device)
 
-config = GPTConfig(vocab_size=32000, block_size=block_size)
+config = GPTConfig(vocab_size=32064, block_size=block_size)
 model = GPT(config)
 model.to(device)
 

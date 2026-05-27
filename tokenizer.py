@@ -33,7 +33,7 @@ class Tokenizer:
             word = list(word.encode())
             while True :
                 
-                min_id = 32001
+                min_id = float("inf")
                 left = 0
                 right = 0
 
@@ -44,7 +44,7 @@ class Tokenizer:
                             left = word[i]
                             right = word[i+1]
                         
-                if (min_id == 32001):
+                if (min_id == float("inf")):
                     break
                 
                 new_word =[]
