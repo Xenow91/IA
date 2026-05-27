@@ -111,7 +111,7 @@ for iter in range(start_iter, max_iters):
     
     if iter % 500 == 0: 
         losses = estimate_loss(model, eval_iters=20)
-        print(f"Itération {iter} | Train Loss: {losses['train']:.4f} | Val Loss: {losses['val']:.4f}")
+        print(f"Itération {iter} | Train Loss: {losses['train']:.4f} | Val Loss: {losses['val']:.4f}", flush=True)
 
         if losses['val'] < best_val_loss:
             best_val_loss = losses['val']
@@ -126,7 +126,7 @@ for iter in range(start_iter, max_iters):
                 'config': config 
             }
             
-            print(f"--> Amélioration détectée. Sauvegarde du checkpoint (Loss: {best_val_loss:.4f})")
+            print(f"--> Amélioration détectée. Sauvegarde du checkpoint (Loss: {best_val_loss:.4f})", flush=True)
             torch.save(checkpoint, 'ckpt.pt')
 
     x, y = train_loader.get_batch()
