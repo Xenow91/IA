@@ -39,11 +39,16 @@ class DataLoaderLite:
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print(f"Entraînement sur : {device}")
-
-batch_size = 4       
+      
 block_size = 1024     
 max_iters = 15000      
-learning_rate = 3e-4  
+learning_rate = 3e-4 
+
+micro_batch_size = 2  
+grad_accum_steps = 8     
+
+
+batch_size = micro_batch_size
 
 
 data_dir = "data" 
@@ -84,7 +89,7 @@ checkpoint_path = '/content/drive/MyDrive/IA_Data/ckpt.pt'
 if os.path.exists(checkpoint_path):
     print(f"Fichier de sauvegarde détecté. Reprise de l'entraînement depuis {checkpoint_path}...")
     
-    checkpoint = torch.load(checkpoint_path, map_location=device)
+    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
     
     
     model.load_state_dict(checkpoint['model'])
@@ -129,15 +134,23 @@ for iter in range(start_iter, max_iters):
             print(f"--> Amélioration détectée. Sauvegarde du checkpoint (Loss: {best_val_loss:.4f})", flush=True)
             torch.save(checkpoint, checkpoint_path)
 
-    x, y = train_loader.get_batch()
     
     optimizer.zero_grad(set_to_none=True)
-    logits, loss = model(x, targets=y)
-    
-    loss.backward()
-    optimizer.step()
+    loss_accum = 0.0
 
+    for micro_step in range(grad_accum_steps):
+        x, y = train_loader.get_batch()
+        
+        logits, loss = model(x, targets=y)
+        
+        loss = loss / grad_accum_steps
+        loss_accum += loss.detach()
+        
+        loss.backward()
+        
+    optimizer.step()
+    
     if iter % 10 == 0:
-        print(f"Step {iter:04d} | Batch Loss: {loss.item():.4f}")
+        print(f"Step {iter:04d} | Effective Batch Loss: {loss_accum.item():.4f}", flush=True)
 
     
