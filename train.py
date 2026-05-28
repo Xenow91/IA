@@ -40,9 +40,9 @@ class DataLoaderLite:
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print(f"Entraînement sur : {device}")
 
-batch_size = 2       
+batch_size = 4       
 block_size = 1024     
-max_iters = 5000      
+max_iters = 15000      
 learning_rate = 3e-4  
 
 

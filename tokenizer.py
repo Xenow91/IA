@@ -67,5 +67,5 @@ class Tokenizer:
 
 
     def decode(self, ids: list[int]) -> str:
-        byte_sequence = b''.join([self.vocab[idx] for idx in ids])
+        byte_sequence = b''.join([self.vocab.get(idx, b'') for idx in ids])
         return byte_sequence.decode('utf-8', errors='replace').replace("▁", " ")
