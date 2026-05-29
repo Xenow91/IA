@@ -43,8 +43,8 @@ block_size = 1024
 max_iters = 15000      
 learning_rate = 3e-4 
 
-micro_batch_size = 2  
-grad_accum_steps = 8     
+micro_batch_size = 4  
+grad_accum_steps = 4     
 
 
 batch_size = micro_batch_size
