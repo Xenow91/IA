@@ -5,7 +5,6 @@ import time
 from model import GPT, GPTConfig 
 from tokenizer import Tokenizer 
 
-
 class DataLoaderLite:
     def __init__(self, data_dir, split, batch_size, block_size, device):
         self.batch_size = batch_size
@@ -86,11 +85,11 @@ best_val_loss = float('inf')
 
 checkpoint_path = '/content/drive/MyDrive/IA_Data/ckpt.pt'
 
+
 if os.path.exists(checkpoint_path):
     print(f"Fichier de sauvegarde détecté. Reprise de l'entraînement depuis {checkpoint_path}...")
     
     checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
-    
     
     model.load_state_dict(checkpoint['model'])
     best_val_loss = checkpoint['best_val_loss']
@@ -117,24 +116,27 @@ for iter in range(start_iter, max_iters):
     if iter % 500 == 0: 
         losses = estimate_loss(model, eval_iters=20)
         print(f"Itération {iter} | Train Loss: {losses['train']:.4f} | Val Loss: {losses['val']:.4f}", flush=True)
+  
+        raw_model = model._orig_mod if hasattr(model, '_orig_mod') else model
+            
+        checkpoint = {
+            'model': raw_model.state_dict(),
+            'optimizer': optimizer.state_dict(),
+            'iter_num': iter,
+            'best_val_loss': best_val_loss,
+            'config': config 
+        }
+        
+        torch.save(checkpoint, checkpoint_path)
+        print(f"--> Checkpoint de sécurité sauvegardé (Itération {iter})", flush=True)
 
         if losses['val'] < best_val_loss:
             best_val_loss = losses['val']
-            
-            raw_model = model._orig_mod if hasattr(model, '_orig_mod') else model
-            
-            checkpoint = {
-                'model': raw_model.state_dict(),
-                'optimizer': optimizer.state_dict(),
-                'iter_num': iter,
-                'best_val_loss': best_val_loss,
-                'config': config 
-            }
-            
-            print(f"--> Amélioration détectée. Sauvegarde du checkpoint (Loss: {best_val_loss:.4f})", flush=True)
-            torch.save(checkpoint, checkpoint_path)
+            checkpoint['best_val_loss'] = best_val_loss
+            best_checkpoint_path = checkpoint_path.replace('ckpt.pt', 'best_model.pt')
+            torch.save(checkpoint, best_checkpoint_path)
+            print(f"--> Nouveau record détecté ! Modèle copié dans {best_checkpoint_path}", flush=True)
 
-    
     optimizer.zero_grad(set_to_none=True)
     loss_accum = 0.0
 
