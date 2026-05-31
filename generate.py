@@ -10,7 +10,7 @@ model = GPT(config)
 model.to(device)
 
 # On charge le fichier directement depuis ton disque dur local
-checkpoint = torch.load('data/ckpt.pt', map_location=device, weights_only=False)
+checkpoint = torch.load('data/best_model.pt', map_location=device, weights_only=False)
 
 state_dict = checkpoint['model']
 unwanted_prefix = '_orig_mod.'

@@ -1,9 +1,7 @@
 import os
 import torch
 import numpy as np
-import time
 from model import GPT, GPTConfig 
-from tokenizer import Tokenizer 
 
 class DataLoaderLite:
     def __init__(self, data_dir, split, batch_size, block_size, device):
@@ -83,7 +81,7 @@ def estimate_loss(model, eval_iters=20):
 start_iter = 0
 best_val_loss = float('inf')
 
-checkpoint_path = '/content/drive/MyDrive/IA_Data/ckpt.pt'
+checkpoint_path = 'ckpt.pt'
 
 
 if os.path.exists(checkpoint_path):
