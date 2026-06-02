@@ -1,6 +1,6 @@
 import torch
 from model import GPT, GPTConfig 
-from tokenizer import Tokenizer
+from custom_tokenizer.tokenizer import Tokenizer
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print(f"Chargement sur : {device}")
