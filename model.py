@@ -6,7 +6,6 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
-
 class RMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()
@@ -21,7 +20,6 @@ class RMSNorm(nn.Module):
 
         output = self._norm(x.float()).type_as(x)
         return output * self.weight
-
 
 class RotaryEmbedding(nn.Module):
 
@@ -62,6 +60,9 @@ def rotate_half(x):
 
 def apply_rotary_pos_emb(q, k, cos, sin):
 
+    cos = cos.to(dtype=torch.bfloat16)
+    sin = sin.to(dtype=torch.bfloat16)
+
     q_rot = (q * cos) + (rotate_half(q) * sin)
     k_rot = (k * cos) + (rotate_half(k) * sin)
     
@@ -73,46 +74,39 @@ class CausalSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
         assert config.n_embd % config.n_head == 0
-        # key, query, value projections for all heads, but in a batch
-        self.c_attn = nn.Linear(config.n_embd, 3 * config.n_embd, bias=config.bias)
-        # output projection
-        self.c_proj = nn.Linear(config.n_embd, config.n_embd, bias=config.bias)
-        # regularization
-        self.attn_dropout = nn.Dropout(config.dropout)
-        self.resid_dropout = nn.Dropout(config.dropout)
+        assert config.n_head % config.n_kv_heads == 0
+
         self.n_head = config.n_head
         self.n_embd = config.n_embd
+        self.n_kv_head = config.n_kv_heads
+        self.n_head_dim = self.n_embd//self.n_head
         self.dropout = config.dropout
 
+        # key, query, value projections for all heads, but in a batch
+        self.c_attn = nn.Linear(self.n_embd, self.n_embd + 2*self.n_kv_head*self.n_head_dim, bias=config.bias)
+        # output projection
+        self.c_proj = nn.Linear(self.n_embd, self.n_embd, bias=config.bias)
+
         self.rotary_emb = RotaryEmbedding(config)
-        
-        # causal mask to ensure that attention is only applied to the left in the input sequence
-        self.register_buffer("bias", torch.tril(torch.ones(config.block_size, config.block_size))
-                                    .view(1, 1, config.block_size, config.block_size))
 
     def forward(self, x):
         B, T, C = x.size() # batch size, sequence length, embedding dimensionality (n_embd)
 
-        # calculate query, key, values for all heads in batch and move head forward to be the batch dim
-        q, k, v  = self.c_attn(x).split(self.n_embd, dim=2)
-        k = k.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
-        q = q.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
-        v = v.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
+        # calculate query, key, values for all heads in batch
+        q, k, v  = self.c_attn(x).split([self.n_embd, self.n_kv_head*self.n_head_dim, self.n_kv_head*self.n_head_dim], dim=2)
+        k = k.view(B, T, self.n_kv_head, self.n_head_dim).transpose(1, 2)
+        q = q.view(B, T, self.n_head, self.n_head_dim).transpose(1, 2) # (B, nh, T, hs)
+        v = v.view(B, T, self.n_kv_head, self.n_head_dim).transpose(1, 2) 
 
         cos,sin = self.rotary_emb(seq_len=T)
         q,k = apply_rotary_pos_emb(q, k, cos, sin)
 
-        # manual implementation of attention
-        att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
-        att = att.masked_fill(self.bias[:,:,:T,:T] == 0, float('-inf'))
-        att = F.softmax(att, dim=-1)
-        att = self.attn_dropout(att)
-        y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
+        y = F.scaled_dot_product_attention(q, k, v, dropout_p=self.dropout if self.training else 0.0, is_causal=True, enable_gqa=True)
         
         y = y.transpose(1, 2).contiguous().view(B, T, C) # re-assemble all head outputs side by side
 
         # output projection
-        y = self.resid_dropout(self.c_proj(y))
+        y = self.c_proj(y)
         return y
 
 class MLP(nn.Module):
@@ -125,7 +119,7 @@ class MLP(nn.Module):
         self.w2 = nn.Linear(config.n_embd, hidden_dim, bias=config.bias)
         
         self.w3 = nn.Linear(hidden_dim, config.n_embd, bias=config.bias)
-        self.dropout = nn.Dropout(config.dropout)
+        
 
     def forward(self, x):
 
@@ -135,7 +129,7 @@ class MLP(nn.Module):
         x = gate * up
     
         x = self.w3(x)
-        return self.dropout(x)
+        return x
 
 class Block(nn.Module):
 
@@ -154,9 +148,10 @@ class Block(nn.Module):
 @dataclass
 class GPTConfig:
     block_size: int = 1024
-    vocab_size: int = 32000 
+    vocab_size: int = 32064 
     n_layer: int = 12
     n_head: int = 12
+    n_kv_heads: int = 4
     n_embd: int = 768   
     dropout: float = 0.0
     bias: bool = False 
@@ -171,7 +166,6 @@ class GPT(nn.Module):
 
         self.transformer = nn.ModuleDict(dict(
             wte = nn.Embedding(config.vocab_size, config.n_embd),
-            drop = nn.Dropout(config.dropout),
             h = nn.ModuleList([Block(config) for _ in range(config.n_layer)]),
             ln_f = RMSNorm(config.n_embd),
         ))
@@ -205,9 +199,6 @@ class GPT(nn.Module):
 
         # forward the GPT model itself
         tok_emb = self.transformer.wte(idx) # token embeddings of shape (b, t, n_embd)
-        
-        # Uniquement le dropout, l'injection de position se fera via RoPE dans les blocs d'attention
-        x = self.transformer.drop(tok_emb)
         
         for block in self.transformer.h:
             x = block(x)

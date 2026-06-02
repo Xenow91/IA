@@ -41,12 +41,11 @@ block_size = 1024
 max_iters = 15000      
 learning_rate = 3e-4 
 
-micro_batch_size = 4  
-grad_accum_steps = 4     
+micro_batch_size = 2  
+grad_accum_steps = 8     
 
 
 batch_size = micro_batch_size
-
 
 data_dir = "data" 
 train_loader = DataLoaderLite(data_dir=data_dir, split="train", 
@@ -104,10 +103,8 @@ if os.path.exists(checkpoint_path):
     optimizer.load_state_dict(checkpoint['optimizer'])
     print("-> État de l'optimiseur AdamW restauré avec succès.")
 
-
 # print("Compilation du modèle")
 # model = torch.compile(model)
-
 
 for iter in range(start_iter, max_iters):
     
@@ -141,8 +138,9 @@ for iter in range(start_iter, max_iters):
     for micro_step in range(grad_accum_steps):
         x, y = train_loader.get_batch()
         
-        logits, loss = model(x, targets=y)
-        
+        with torch.autocast(device_type=device, dtype=torch.bfloat16):
+            logits, loss = model(x, targets=y)
+            
         loss = loss / grad_accum_steps
         loss_accum += loss.detach()
         
