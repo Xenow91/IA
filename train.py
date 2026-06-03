@@ -2,28 +2,33 @@ import os
 import torch
 import numpy as np
 from model import GPT, GPTConfig 
-
 class DataLoaderLite:
     def __init__(self, data_dir, split, batch_size, block_size, device):
         self.batch_size = batch_size
         self.block_size = block_size
         self.device = device
+        self.split = split # <--- CORRECTION : On sauvegarde le nom du split
         
         filename = os.path.join(data_dir, f'{split}.bin')
         
         self.data = np.memmap(filename, dtype=np.uint16, mode='r')
-        print(f"[{split}] DataLoader initialisé. Total tokens : {len(self.data):,}")
+        self.current_position = 0
+        
+        print(f"[{self.split}] DataLoader initialisé. Total tokens : {len(self.data):,}")
 
     def get_batch(self):
-        """
-        Génère un lot (batch) de tenseurs X (entrées) et Y (cibles) et les envoie sur le GPU.
-        """
+        # Utilisation de self.split au lieu de split
+        if self.current_position + (self.batch_size * self.block_size + 1) > len(self.data):
+            self.current_position = 0
+            print(f"\n--- Fin du dataset {self.split} atteinte. Début de l'Epoch suivante ---")
 
-        ix = torch.randint(len(self.data) - self.block_size - 1, (self.batch_size,))
+        buf = self.data[self.current_position : self.current_position + self.batch_size * self.block_size + 1]
+        buf_tensor = torch.from_numpy(buf.astype(np.int64))
         
-
-        x = torch.stack([torch.from_numpy((self.data[i : i + self.block_size]).astype(np.int64)) for i in ix])
-        y = torch.stack([torch.from_numpy((self.data[i + 1 : i + 1 + self.block_size]).astype(np.int64)) for i in ix])
+        x = buf_tensor[:-1].view(self.batch_size, self.block_size)
+        y = buf_tensor[1:].view(self.batch_size, self.block_size)
+        
+        self.current_position += self.batch_size * self.block_size
         
         if 'cuda' in self.device:
             x = x.pin_memory().to(self.device, non_blocking=True)
@@ -32,8 +37,8 @@ class DataLoaderLite:
             x, y = x.to(self.device), y.to(self.device)
             
         return x, y
-
-
+    
+# --- CONFIGURATION MATÉRIELLE ---
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print(f"Entraînement sur : {device}")
       
@@ -41,12 +46,12 @@ block_size = 1024
 max_iters = 15000      
 learning_rate = 3e-4 
 
+# Simulation d'un batch_size effectif de 16 (2 * 8) pour économiser la VRAM
 micro_batch_size = 2  
-grad_accum_steps = 8     
-
-
+grad_accum_steps = 8    
 batch_size = micro_batch_size
 
+# --- INITIALISATION DATALOADERS ---
 data_dir = "data" 
 train_loader = DataLoaderLite(data_dir=data_dir, split="train", 
                               batch_size=batch_size, block_size=block_size, 
@@ -56,7 +61,8 @@ val_loader = DataLoaderLite(data_dir=data_dir, split="val",
                               batch_size=batch_size, block_size=block_size, 
                               device=device)
 
-config = GPTConfig(vocab_size=32064, block_size=block_size, n_head=16, n_embd=1024, n_layer=16 )
+# --- ARCHITECTURE ---
+config = GPTConfig(vocab_size=32064, block_size=block_size, n_head=16, n_embd=1024, n_layer=16)
 model = GPT(config)
 model.to(device)
 
@@ -69,6 +75,7 @@ def estimate_loss(model, eval_iters=20):
         losses = torch.zeros(eval_iters)
         for k in range(eval_iters):
             X, Y = loader.get_batch()
+            # On n'utilise pas l'autocast ici pour avoir la vraie loss en FP32/BF16 natif
             logits, loss = model(X, targets=Y)
             losses[k] = loss.item()
         out[split] = losses.mean().item()
@@ -76,21 +83,17 @@ def estimate_loss(model, eval_iters=20):
     model.train() 
     return out
 
-
+# --- GESTION DES CHECKPOINTS ---
 start_iter = 0
 best_val_loss = float('inf')
-
 checkpoint_path = 'ckpt.pt'
-
 
 if os.path.exists(checkpoint_path):
     print(f"Fichier de sauvegarde détecté. Reprise de l'entraînement depuis {checkpoint_path}...")
-    
     checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
     
     model.load_state_dict(checkpoint['model'])
     best_val_loss = checkpoint['best_val_loss']
-
     start_iter = checkpoint['iter_num'] + 1
     print(f"-> Reprise configurée à l'itération {start_iter} (Meilleure Val Loss connue : {best_val_loss:.4f})")
 else:
@@ -106,8 +109,10 @@ if os.path.exists(checkpoint_path):
 # print("Compilation du modèle")
 # model = torch.compile(model)
 
+# --- BOUCLE D'ENTRAÎNEMENT ---
 for iter in range(start_iter, max_iters):
     
+    # Évaluation périodique
     if iter % 500 == 0: 
         losses = estimate_loss(model, eval_iters=20)
         print(f"Itération {iter} | Train Loss: {losses['train']:.4f} | Val Loss: {losses['val']:.4f}", flush=True)
@@ -132,9 +137,11 @@ for iter in range(start_iter, max_iters):
             torch.save(checkpoint, best_checkpoint_path)
             print(f"--> Nouveau record détecté ! Modèle copié dans {best_checkpoint_path}", flush=True)
 
+    # Mise à zéro des gradients
     optimizer.zero_grad(set_to_none=True)
     loss_accum = 0.0
 
+    # Accumulation de gradients
     for micro_step in range(grad_accum_steps):
         x, y = train_loader.get_batch()
         
@@ -146,9 +153,9 @@ for iter in range(start_iter, max_iters):
         
         loss.backward()
         
+    # Mise à jour des poids
     optimizer.step()
     
+    # Affichage du suivi
     if iter % 10 == 0:
         print(f"Step {iter:04d} | Effective Batch Loss: {loss_accum.item():.4f}", flush=True)
-
-    

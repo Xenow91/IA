@@ -2,75 +2,99 @@ import os
 import numpy as np
 from datasets import load_dataset
 import tqdm
-from custom_tokenizer.tokenizer import Tokenizer
+from custom_tokenizer.tokenizer import Tokenizer # Assure-toi que l'import correspond à ton dossier
 
 def prepare_dataset():
-    # Initialisation de ton tokenizer
     tok = Tokenizer()
 
-    # Chargement en streaming direct depuis HuggingFace
+    # Définition des chemins
+    base_dir = os.path.dirname(__file__)
+    train_filename = os.path.join(base_dir, 'train.bin')
+    val_filename = os.path.join(base_dir, 'val.bin')
+    state_filename = os.path.join(base_dir, 'resume_state.txt')
+
+    # --- LOGIQUE DE REPRISE (RESILIENCE) ---
+    start_idx = 0
+    if os.path.exists(state_filename):
+        with open(state_filename, 'r') as f:
+            content = f.read().strip()
+            if content.isdigit():
+                start_idx = int(content)
+                print(f"Fichier d'état détecté. Reprise à partir du document n°{start_idx}...")
+    else:
+        print("Aucun état précédent. Démarrage depuis le début.")
+
     print("Connexion au flux FineWeb-Edu...")
     dataset = load_dataset("HuggingFaceFW/fineweb-edu", name="sample-10BT", split="train", streaming=True)
+    
+    # On avance le flux jusqu'au point de sauvegarde si nécessaire
+    if start_idx > 0:
+        dataset = dataset.skip(start_idx)
 
-    # Tes constantes (Validées pour l'empreinte RAM/Disque)
     dtype = np.uint16
     eot_token = 32001 
     buffer_size_limit = 1_000_000 
 
-    train_filename = os.path.join(os.path.dirname(__file__), 'train.bin')
-    val_filename = os.path.join(os.path.dirname(__file__), 'val.bin')
-
-    # On utilise deux buffers distincts pour gérer le split à la volée
     buffer_train = []
     buffer_val = []
     total_tokens_train = 0
     total_tokens_val = 0
 
-    # Ouverture simultanée des deux fichiers
+    # On utilise 'ab' (Append Binary). Si les fichiers existent, on écrit à la suite.
     with open(train_filename, 'ab') as f_train, open(val_filename, 'ab') as f_val:
         
-        # Tqdm ne peut pas connaître le total en streaming, il affichera les itérations/s
-        pbar = tqdm.tqdm(desc="Encodage FineWeb-Edu (Streaming)")
+        pbar = tqdm.tqdm(desc="Encodage FineWeb-Edu", initial=start_idx)
         
-        for i, example in enumerate(dataset):
+        # enumerate(..., start=start_idx) permet de garder le vrai numéro du document
+        for i, example in enumerate(dataset, start=start_idx):
             text = example['text']
             ids = tok.encode(text)
-            
-            # Ajout du token de séparation
             ids.append(eot_token)
             
-            # Routage : 1 document sur 100 (1%) part dans le set de validation
             is_val = (i % 100 == 0)
             
             if is_val:
                 buffer_val.extend(ids)
-                if len(buffer_val) >= buffer_size_limit:
-                    total_tokens_val += len(buffer_val)
-                    f_val.write(np.array(buffer_val, dtype=dtype).tobytes())
-                    buffer_val = []  # Vidage du buffer
             else:
                 buffer_train.extend(ids)
-                if len(buffer_train) >= buffer_size_limit:
-                    total_tokens_train += len(buffer_train)
-                    f_train.write(np.array(buffer_train, dtype=dtype).tobytes())
-                    buffer_train = [] # Vidage du buffer
+                
+            # --- CHECKPOINT ATOMIQUE ---
+            # On déclenche la sauvegarde quand le gros buffer (train) est plein
+            if len(buffer_train) >= buffer_size_limit:
+                # 1. Vidage Train
+                total_tokens_train += len(buffer_train)
+                f_train.write(np.array(buffer_train, dtype=dtype).tobytes())
+                buffer_train = []
+                
+                # 2. Vidage Val (pour garder les deux fichiers parfaitement synchronisés)
+                if len(buffer_val) > 0:
+                    total_tokens_val += len(buffer_val)
+                    f_val.write(np.array(buffer_val, dtype=dtype).tobytes())
+                    buffer_val = []
+                    
+                # 3. Sauvegarde de l'état (index actuel)
+                with open(state_filename, 'w') as f_state:
+                    f_state.write(str(i))
             
             pbar.update(1)
         
-        # Fin du flux : Flush final des buffers restants (très important pour ne rien perdre)
+        # --- FLUSH FINAL (Fin du dataset) ---
         if len(buffer_train) > 0:
             total_tokens_train += len(buffer_train)
             f_train.write(np.array(buffer_train, dtype=dtype).tobytes())
-            
         if len(buffer_val) > 0:
             total_tokens_val += len(buffer_val)
             f_val.write(np.array(buffer_val, dtype=dtype).tobytes())
             
+        # Si on arrive à la toute fin, on peut supprimer le fichier d'état
+        if os.path.exists(state_filename):
+            os.remove(state_filename)
+            
         pbar.close()
         
-        print("\n--- Encodage Terminé ---")
-        print(f"Tokens Train : {total_tokens_train:,}")
-        print(f"Tokens Val   : {total_tokens_val:,}")
+        print("\n--- Encodage Totalement Terminé ---")
+        print(f"Tokens Train ajoutés : {total_tokens_train:,}")
+        print(f"Tokens Val ajoutés   : {total_tokens_val:,}")
 
 if __name__ == "__main__":
     prepare_dataset()
