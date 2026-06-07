@@ -60,8 +60,8 @@ def rotate_half(x):
 
 def apply_rotary_pos_emb(q, k, cos, sin):
 
-    cos = cos.to(dtype=torch.bfloat16)
-    sin = sin.to(dtype=torch.bfloat16)
+    cos = cos.to(dtype=q.dtype)
+    sin = sin.to(dtype=q.dtype)
 
     q_rot = (q * cos) + (rotate_half(q) * sin)
     k_rot = (k * cos) + (rotate_half(k) * sin)
@@ -147,14 +147,15 @@ class Block(nn.Module):
 
 @dataclass
 class GPTConfig:
-    block_size: int = 1024
-    vocab_size: int = 32064 
-    n_layer: int = 12
-    n_head: int = 12
-    n_kv_heads: int = 4
-    n_embd: int = 768   
+    block_size: int = 2048
+    vocab_size: int = 50304 
+    n_layer: int = 32
+    n_head: int = 24
+    n_kv_heads: int = 6
+    n_embd: int = 1536   
     dropout: float = 0.0
     bias: bool = False 
+    use_checkpointing: bool = False
 
 class GPT(nn.Module):
 
@@ -199,9 +200,13 @@ class GPT(nn.Module):
 
         # forward the GPT model itself
         tok_emb = self.transformer.wte(idx) # token embeddings of shape (b, t, n_embd)
-        
+        x = tok_emb
+
         for block in self.transformer.h:
-            x = block(x)
+            if self.config.use_checkpointing:
+                x = torch.utils.checkpoint.checkpoint(block, x, use_reentrant=False)
+            else:
+                x = block(x)
         x = self.transformer.ln_f(x)
 
         if targets is not None:

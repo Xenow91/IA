@@ -2,10 +2,10 @@ import os
 import numpy as np
 from datasets import load_dataset
 import tqdm
-from custom_tokenizer.tokenizer import Tokenizer # Assure-toi que l'import correspond à ton dossier
+import tiktoken
 
 def prepare_dataset():
-    tok = Tokenizer()
+    tok = tiktoken.get_encoding("gpt2")
 
     # Définition des chemins
     base_dir = os.path.dirname(__file__)
@@ -32,7 +32,7 @@ def prepare_dataset():
         dataset = dataset.skip(start_idx)
 
     dtype = np.uint16
-    eot_token = 32001 
+    eot_token = tok.eot_token # 50256
     buffer_size_limit = 1_000_000 
 
     buffer_train = []
@@ -48,7 +48,7 @@ def prepare_dataset():
         # enumerate(..., start=start_idx) permet de garder le vrai numéro du document
         for i, example in enumerate(dataset, start=start_idx):
             text = example['text']
-            ids = tok.encode(text)
+            ids = tok.encode(text, disallowed_special=())
             ids.append(eot_token)
             
             is_val = (i % 100 == 0)
