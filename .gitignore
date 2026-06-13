@@ -1,1 +1,7 @@
 data/
+*.bin
+*.pt
+resume_state.txt
+__pycache__/
+wandb/
+.venv/

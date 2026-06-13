@@ -58,8 +58,8 @@ warmup_steps = 1000
 max_iters = 20_000
 
 # Paramètres de Batch mis à jour (Optimisés 5060 Ti - 16Go)
-micro_batch_size = 4  
-grad_accum_steps = 64    
+micro_batch_size = 2  
+grad_accum_steps = 128    
 batch_size = micro_batch_size
 
 def get_lr(it):
