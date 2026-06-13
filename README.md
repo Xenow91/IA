@@ -1,12 +1,12 @@
 # Projet IA : Modèle de Langage de 450M Paramètres de Zéro
 
-Ce projet contient l'intégralité du code source pour créer, pré-entraîner et affiner (Fine-Tuning) un modèle de langage (LLM) de type GPT depuis zéro, en utilisant PyTorch.
+Ce projet contient l'intégralité du code source pour créer, pré-entraîner et affiner (Fine-Tuning) un modèle de langage (LLM) de type GPT depuis zéro, en utilisant PyTorch. Pour l'essayer : https://xenow91.github.io/vitrine/index.html 
 
 ## Objectif du Projet
 L'objectif est de démontrer qu'il est possible d'entraîner un modèle de 450 Millions de paramètres sur 12 Milliards de tokens avec du matériel grand public (une simple RTX 5060 Ti 16 Go de VRAM) via la plateforme Vast.ai, en appliquant les techniques de l'état de l'art (FlashAttention, bfloat16, RMSNorm, RoPE).
 
 ## Caractéristiques du Modèle
-- Architecture : Transformer Causal (Style Llama / GPT)
+- Architecture : Transformer
 - Paramètres : ~446 Millions
 - Couches (Layers) : 26
 - Têtes d'attention (Heads) : 16
@@ -15,7 +15,7 @@ L'objectif est de démontrer qu'il est possible d'entraîner un modèle de 450 M
 - Contexte maximum : 2048 tokens
 
 ## Optimisations Techniques Implémentées
-Le code intègre les meilleures optimisations modernes pour maximiser la vitesse et réduire l'empreinte mémoire :
+Le code intègre des optimisations modernes pour maximiser la vitesse et réduire l'empreinte mémoire :
 1. FlashAttention (SDP) : Accélération matérielle du calcul de l'attention.
 2. Mixed Precision (bfloat16) : Division par deux de la consommation VRAM sans perte de stabilité.
 3. Gradient Accumulation : Simulation d'un batch global de 256 séquences pour stabiliser la descente de gradient malgré la limite des 16 Go de VRAM.
