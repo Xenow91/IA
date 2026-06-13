@@ -3,7 +3,7 @@
 Ce projet contient l'intégralité du code source pour créer, pré-entraîner et affiner (Fine-Tuning) un modèle de langage (LLM) de type GPT depuis zéro, en utilisant PyTorch. Pour l'essayer : https://xenow91.github.io/vitrine/index.html 
 
 ## Objectif du Projet
-L'objectif est de démontrer qu'il est possible d'entraîner un modèle de 450 Millions de paramètres sur 12 Milliards de tokens avec du matériel grand public (une simple RTX 5060 Ti 16 Go de VRAM) via la plateforme Vast.ai, en appliquant les techniques de l'état de l'art (FlashAttention, bfloat16, RMSNorm, RoPE).
+L'objectif est de démontrer qu'il est possible d'entraîner un modèle de 450 Millions de paramètres sur 12 Milliards de tokens avec du matériel grand public (une simple RTX 5060 Ti 16 Go de VRAM) via la plateforme Vast.ai, en appliquant les techniques de l'état de l'art (FlashAttention, bfloat16, RMSNorm, RoPE). Avant tout c'est aussi pour m'améliorer et pour apprendre plus en profondeur ce domaine qui me passione !
 
 ## Caractéristiques du Modèle
 - Architecture : Transformer
