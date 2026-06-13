@@ -1,51 +1,51 @@
-# Projet IA : Modèle de Langage de 450M Paramètres de Zéro
+# AI Project: 450M Parameter Language Model from Scratch
 
-Ce projet contient l'intégralité du code source pour créer, pré-entraîner et affiner (Fine-Tuning) un modèle de langage (LLM) de type GPT depuis zéro, en utilisant PyTorch. Pour l'essayer : https://xenow91.github.io/vitrine/index.html 
+This project contains the complete source code to create, pre-train, and fine-tune (SFT) a GPT-style Large Language Model (LLM) from scratch using PyTorch. To try it out: https://xenow91.github.io/vitrine/index.html
 
-## Objectif du Projet
-L'objectif est de démontrer qu'il est possible d'entraîner un modèle de 450 Millions de paramètres sur 12 Milliards de tokens avec du matériel grand public (une simple RTX 5060 Ti 16 Go de VRAM) via la plateforme Vast.ai, en appliquant les techniques de l'état de l'art (FlashAttention, bfloat16, RMSNorm, RoPE). Avant tout c'est aussi pour m'améliorer et pour apprendre plus en profondeur ce domaine qui me passione !
+## Project Objective
+The objective is to demonstrate that it is possible to train a 450 Million parameter model on 12 Billion tokens using consumer-grade hardware (a single RTX 5060 Ti 16GB VRAM) via the Vast.ai platform, applying state-of-the-art techniques (FlashAttention, bfloat16, RMSNorm, RoPE). Above all, it is also a personal endeavor to improve my skills and gain a deeper understanding of this field that I am passionate about!
 
-## Caractéristiques du Modèle
-- Architecture : Transformer
-- Paramètres : ~446 Millions
-- Couches (Layers) : 26
-- Têtes d'attention (Heads) : 16
-- Dimension de l'Embedding (d_model) : 1024
-- Taille du Vocabulaire : 50 304 tokens
-- Contexte maximum : 2048 tokens
+## Model Characteristics
+- Architecture: Transformer
+- Parameters: ~446 Million
+- Layers: 26
+- Attention Heads: 16
+- Embedding Dimension (d_model): 1024
+- Vocabulary Size: 50,304 tokens
+- Maximum Context: 2048 tokens
 
-## Optimisations Techniques Implémentées
-Le code intègre des optimisations modernes pour maximiser la vitesse et réduire l'empreinte mémoire :
-1. FlashAttention (SDP) : Accélération matérielle du calcul de l'attention.
-2. Mixed Precision (bfloat16) : Division par deux de la consommation VRAM sans perte de stabilité.
-3. Gradient Accumulation : Simulation d'un batch global de 256 séquences pour stabiliser la descente de gradient malgré la limite des 16 Go de VRAM.
-4. Fused AdamW & Cosine Decay : Optimiseur fusionné en C++ et baisse dynamique du Learning Rate pour converger vers la meilleure Loss.
-5. Rotary Positional Embeddings (RoPE) et RMSNorm pour une meilleure stabilité mathématique.
+## Implemented Technical Optimizations
+The code integrates modern optimizations to maximize speed and reduce memory footprint:
+1. FlashAttention (SDP): Hardware acceleration for attention computation.
+2. Mixed Precision (bfloat16): Halves VRAM consumption without losing stability.
+3. Gradient Accumulation: Simulates a global batch of 256 sequences to stabilize gradient descent despite the 16GB VRAM limit.
+4. Fused AdamW & Cosine Decay: C++ fused optimizer and dynamic Learning Rate decay to converge to the best Loss.
+5. Rotary Positional Embeddings (RoPE) and RMSNorm for better mathematical stability.
 
-## Structure du Projet
+## Project Structure
 
-### 1. Tokenizer et Préparation des Données
-À des fins pédagogiques, un tokenizer personnalisé (`custom_tokenizer`) a été développé pour comprendre la mécanique sous-jacente du Byte-Pair Encoding (BPE). Cependant, pour des raisons de performance et de standardisation, le projet final utilise le tokenizer optimisé d'OpenAI (`tiktoken` version GPT-2).
-Le script `prepare.py` gère le téléchargement et la tokenization d'un sous-ensemble du dataset HuggingFaceFW/fineweb-edu (textes éducatifs de haute qualité), générant les fichiers binaires `train.bin` et `val.bin` pour une lecture hyper-rapide via `np.memmap`.
+### 1. Tokenizer and Data Preparation
+For educational purposes, a custom tokenizer (`custom_tokenizer`) was developed to understand the underlying mechanics of Byte-Pair Encoding (BPE). However, for performance and standardization reasons, the final project uses OpenAI's optimized tokenizer (`tiktoken` GPT-2 version).
+The `prepare.py` script handles downloading and tokenizing a subset of the HuggingFaceFW/fineweb-edu dataset (high-quality educational texts), generating binary files `train.bin` and `val.bin` for ultra-fast reading via `np.memmap`.
 
-### 2. Architecture du Modèle (model.py)
-Définition complète du réseau de neurones avec PyTorch. Pas de bibliothèques tierces cachées, toute l'architecture (Attention, FeedForward, Normalisation) est écrite "from scratch".
+### 2. Model Architecture (model.py)
+Complete definition of the neural network with PyTorch. No hidden third-party libraries; the entire architecture (Attention, FeedForward, Normalization) is written from scratch.
 
-### 3. Pré-Entraînement (train.py)
-Script d'entraînement intensif conçu pour tourner sur Vast.ai. Intègre un suivi en direct sur WandB et un système de sauvegarde automatique du meilleur checkpoint (`best_model.pt`) chaque fois qu'un record de Loss est battu.
+### 3. Pre-Training (train.py)
+Intensive training script designed to run on Vast.ai. Includes live tracking on WandB and an automatic backup system for the best checkpoint (`best_model.pt`) every time a Loss record is broken.
 
 ### 4. Instruction Tuning / SFT (prepare_sft.py & finetune.py)
-Une fois le modèle doté de la parole (Pre-training), ces scripts le transforment en Assistant.
-- Téléchargement du dataset Databricks Dolly-15k.
-- Application d'un Loss Masking (`ignore_index=-1`) sur les instructions de l'utilisateur pour forcer le modèle à apprendre uniquement sur les réponses.
-- Apprentissage lent (Low Learning Rate) sur 1.5 Epoch pour éviter l'oubli catastrophique (Catastrophic Forgetting).
+Once the model has learned to generate text (Pre-training), these scripts transform it into an Assistant.
+- Downloads the Databricks Dolly-15k dataset.
+- Applies Loss Masking (`ignore_index=-1`) on the user's instructions to force the model to learn solely from the responses.
+- Slow learning (Low Learning Rate) over 1.5 Epochs to avoid Catastrophic Forgetting.
 
-## Reproduction de l'entraînement
-1. Installez les dépendances (`torch`, `numpy`, `datasets`, `tiktoken`, `wandb`).
-2. Lancez `python prepare.py` pour télécharger les 20 Go de données de pré-entraînement.
-3. Transférez le dossier sur votre machine GPU (ex: Vast.ai) via SFTP/WinSCP.
-4. Lancez `python train.py`. L'entraînement prend environ 9 jours sur une RTX 5060 Ti.
-5. À la fin, exécutez `python prepare_sft.py` puis `python finetune.py` pour la phase d'instruction-tuning.
+## Training Reproduction
+1. Install dependencies (`torch`, `numpy`, `datasets`, `tiktoken`, `wandb`).
+2. Run `python prepare.py` to download the 20GB of pre-training data.
+3. Transfer the folder to your GPU machine (e.g., Vast.ai) via SFTP/WinSCP.
+4. Run `python train.py`. The training takes approximately 9 days on an RTX 5060 Ti.
+5. Upon completion, run `python prepare_sft.py` then `python finetune.py` for the instruction-tuning phase.
 
 ---
-Projet réalisé à des fins d'apprentissage et de recherche sur les LLMs.
+Project created for educational and research purposes on LLMs.
