@@ -27,16 +27,16 @@ def prepare_sft():
         # Formatage de la réponse (partie que le modèle doit prédire)
         response_text = f"{response}<|endoftext|>"
         
-        # On autorise le special_token <|endoftext|>
-        prompt_tokens = enc.encode(prompt_text, allowed_special={'<|endoftext|>'})
-        response_tokens = enc.encode(response_text, allowed_special={'<|endoftext|>'})
+        # On décode strictement sans autoriser de special tokens
+        prompt_tokens = enc.encode(prompt_text)
+        response_tokens = enc.encode(response)
         
-        # Concaténation totale
-        input_ids = prompt_tokens + response_tokens
+        # Concaténation totale avec le token de fin 50256 rajouté manuellement
+        input_ids = prompt_tokens + response_tokens + [50256]
         
         # IMPORTANT : On masque la Loss sur le Prompt. 
         # Ton fichier model.py utilise ignore_index=-1 (et non -100).
-        labels = [-1] * len(prompt_tokens) + response_tokens
+        labels = [-1] * len(prompt_tokens) + response_tokens + [50256]
         
         # On filtre les exemples trop longs pour notre contexte
         if len(input_ids) <= 2048:

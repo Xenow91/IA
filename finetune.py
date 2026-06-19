@@ -39,17 +39,18 @@ class SFTDataLoader:
             input_ids = sample['input_ids'].tolist()
             labels = sample['labels'].tolist()
             
-            # Padding : on remplit avec des tokens vides pour atteindre block_size
-            if len(input_ids) < self.block_size:
-                pad_len = self.block_size - len(input_ids)
+            # Padding : on remplit avec des tokens vides pour atteindre block_size + 1 (pour le décalage)
+            if len(input_ids) < self.block_size + 1:
+                pad_len = (self.block_size + 1) - len(input_ids)
                 input_ids = input_ids + [50256] * pad_len # endoftext
                 labels = labels + [-1] * pad_len          # Ignoré par la Loss
             else:
-                input_ids = input_ids[:self.block_size]
-                labels = labels[:self.block_size]
+                input_ids = input_ids[:self.block_size + 1]
+                labels = labels[:self.block_size + 1]
                 
-            batch_input_ids.append(input_ids)
-            batch_labels.append(labels)
+            # LE FAMEUX DÉCALAGE (SHIFT) : x prédit le token *suivant* (y)
+            batch_input_ids.append(input_ids[:-1])
+            batch_labels.append(labels[1:])
             
         x = torch.tensor(batch_input_ids, dtype=torch.long)
         y = torch.tensor(batch_labels, dtype=torch.long)
@@ -116,6 +117,8 @@ if os.path.exists(checkpoint_path):
     raw_model = model._orig_mod if hasattr(model, '_orig_mod') else model
     raw_model.load_state_dict(checkpoint['model'])
     print(f"-> Modèle de base chargé avec succès !")
+    del checkpoint
+    torch.cuda.empty_cache()
 else:
     print(f"ERREUR CRITIQUE : {checkpoint_path} introuvable.")
     print("Vous devez d'abord télécharger best_model.pt à la fin de votre pré-entraînement Vast.ai !")
